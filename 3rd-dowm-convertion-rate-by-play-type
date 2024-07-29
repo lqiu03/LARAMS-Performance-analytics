@@ -1,0 +1,45 @@
+# Load necessary libraries
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for the 2023 season
+pbp_data <- load_pbp(2023)
+
+# Filter the data for the LA Rams
+rams_data <- pbp_data %>%
+  filter(posteam == "LA")
+
+# Filter for third down plays, excluding "no_play" and other non-standard plays, and calculate the conversion rate by play type
+third_down_conversion <- rams_data %>%
+  filter(down == 3, play_type %in% c("pass", "run")) %>%
+  group_by(week, game_id, home_team, away_team, play_type) %>%
+  summarize(
+    third_down_attempts = n(),
+    third_down_conversions = sum(first_down == 1, na.rm = TRUE),
+    conversion_rate = third_down_conversions / third_down_attempts,
+    .groups = 'drop'
+  )
+
+# Create a new column for the facet labels
+third_down_conversion <- third_down_conversion %>%
+  mutate(facet_label = paste("2023 Week", week, away_team, "at", home_team))
+
+# Print third down conversion rates by opponent and play type
+print(third_down_conversion)
+
+# Visualize third down conversion rates by opponent and play type
+ggplot(third_down_conversion, aes(x = conversion_rate, y = play_type, fill = play_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = scales::percent(conversion_rate, accuracy = 0.1)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.1, 
+            size = 3) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  facet_wrap(~ reorder(facet_label, week), scales = "free_y", ncol = 3) +
+  labs(title = "3rd Down Conversion Rate by Play Type for LA Rams 2023 Season by Game",
+       subtitle = "Play types like QB kneel and Field goals were filtered",
+       caption = "By Lucas Qiu",
+       x = "Conversion Rate", y = "Play Type") +
+  theme_minimal() +
+  theme(legend.position = "bottom", legend.title = element_blank(), plot.title = element_text(size = 16))
