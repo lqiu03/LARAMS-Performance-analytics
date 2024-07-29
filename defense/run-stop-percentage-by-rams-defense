@@ -1,0 +1,83 @@
+# Load necessary libraries
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for the 2023 season
+pbp_data <- load_pbp(2023)
+
+# Filter the data for running plays
+running_data <- pbp_data %>%
+  filter(season == 2023 & play_type == "run")
+
+# Classify plays as first half or second half
+running_data <- running_data %>%
+  mutate(
+    half = case_when(
+      qtr %in% c(1, 2) ~ "First Half",
+      qtr %in% c(3, 4) ~ "Second Half",
+      TRUE ~ NA_character_
+    )
+  )
+
+# Filter out NA values in half
+running_data <- running_data %>%
+  filter(!is.na(half))
+
+# Calculate run stop percentage for the Rams' opponents by half
+run_stop_percentage <- running_data %>%
+  filter(defteam == "LA") %>%
+  group_by(week, game_id, home_team, away_team, half) %>%
+  summarize(
+    run_attempts = n(),
+    run_stops = sum(yards_gained <= 3, na.rm = TRUE),
+    run_stop_percentage = run_stops / run_attempts * 100,
+    run_stop_label = paste(run_stops, "/", run_attempts),
+    .groups = 'drop'
+  )
+
+# Retrieve end scores and determine W/L
+scores <- pbp_data %>%
+  group_by(game_id) %>%
+  summarize(
+    home_team = first(home_team),
+    away_team = first(away_team),
+    home_score = max(home_score, na.rm = TRUE),
+    away_score = max(away_score, na.rm = TRUE),
+    week = first(week),  # Ensure week is included for the join
+    result = if_else(home_team == "LA" & home_score > away_score, "W",
+                     if_else(away_team == "LA" & away_score > home_score, "W", "L")),
+    .groups = 'drop'
+  )
+
+# Join scores with run stop percentage data
+run_stop_percentage <- run_stop_percentage %>%
+  left_join(scores, by = c("game_id", "home_team", "away_team", "week"))
+
+# Create a new column for the facet labels with scores and result
+run_stop_percentage <- run_stop_percentage %>%
+  mutate(facet_label = paste("2023 Week", week, away_team, "at", home_team, "-", 
+                             away_score, ":", home_score, "(", result, ")"))
+
+# Adjust the order of the 'half' factor levels
+run_stop_percentage$half <- factor(run_stop_percentage$half, levels = c("First Half", "Second Half"))
+
+# Print run stop percentage data
+print(run_stop_percentage)
+
+# Visualize run stop percentage against each opponent by half
+ggplot(run_stop_percentage, aes(x = run_stop_percentage, y = half, fill = half)) +
+  geom_bar(stat = "identity", position = position_dodge2(reverse = TRUE, padding = 0.5)) +
+  geom_text(aes(label = run_stop_label), 
+            position = position_dodge2(width = 0.9, reverse = TRUE), 
+            hjust = -0.1, 
+            size = 3, 
+            color = "black") +
+  facet_wrap(~ reorder(facet_label, week), scales = "free_y", ncol = 3) +
+  labs(title = "Run Stop Percentage by Rams Defense Against Opponents (2023)", 
+       subtitle = "Defensive Analysis of Percentage of Opponent Run Plays that Gain 3 yards or less",
+       caption = "By Lucas Qiu",
+       x = "Run Stop Percentage (%)", 
+       y = "Half") +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(size = 16), axis.text.x = element_text(angle = 45, hjust = 1))
