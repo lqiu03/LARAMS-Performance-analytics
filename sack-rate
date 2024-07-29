@@ -1,0 +1,50 @@
+# Install and load necessary packages
+if (!require("nflfastR")) install.packages("nflfastR")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("ggplot2")) install.packages("ggplot2")
+
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for 2022 and 2023 seasons
+pbp_data_2022 <- load_pbp(2022)
+pbp_data_2023 <- load_pbp(2023)
+
+# Combine the datasets for 2022 and 2023
+pbp_data <- bind_rows(pbp_data_2022, pbp_data_2023)
+
+# Filter for Rams games
+rams_plays <- pbp_data %>%
+  filter(posteam == "LA")
+
+# Calculate Sack Rates for Each Quarterback
+qb_sack_rates <- rams_plays %>%
+  filter(play_type == "pass") %>%
+  group_by(passer_player_name) %>%
+  summarize(
+    total_dropbacks = n(),
+    sacks = sum(sack == 1, na.rm = TRUE),
+    sack_rate = (sacks / total_dropbacks) * 100
+  ) %>%
+  filter(total_dropbacks >= 10)  # Ensure a minimum number of dropbacks to be included
+
+# Plot Sack Rates
+sack_rate_plot <- ggplot(qb_sack_rates, aes(x = reorder(passer_player_name, sack_rate), y = sack_rate, fill = passer_player_name)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  labs(
+    x = "Quarterback",
+    y = "Sack Rate (%)",
+    title = "Sack Rate for Rams Quarterbacks",
+    subtitle = "2022-2023, Minimum of 10 dropbacks",
+    caption = "By Lucas Qiu",
+    fill = "Quarterback"
+  ) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+print(sack_rate_plot)
