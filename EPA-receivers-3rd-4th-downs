@@ -1,0 +1,31 @@
+# Calculate EPA for each receiver on 3rd and 4th downs
+receiver_epa_third_fourth <- rams_plays %>%
+  filter(play_type == "pass", !is.na(receiver_player_name), down %in% c(3, 4)) %>%
+  group_by(receiver_player_name) %>%
+  summarize(
+    total_plays = n(),
+    total_epa = sum(epa, na.rm = TRUE),
+    epa_per_play = mean(epa, na.rm = TRUE)
+  ) %>%
+  filter(total_plays >= 10)  # Ensure a minimum number of plays to be included
+
+# Plot EPA per Play for Receivers on 3rd and 4th Downs
+epa_third_fourth_plot <- ggplot(receiver_epa_third_fourth, aes(x = reorder(receiver_player_name, epa_per_play), y = epa_per_play, fill = receiver_player_name)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  labs(
+    x = "Receiver",
+    y = "EPA per Play",
+    title = "EPA per Play for Rams Receivers on 3rd and 4th Downs",
+    subtitle = "2022-2023, Minimum of 10 plays",
+    caption = "By Lucas Qiu",
+    fill = "Receiver"
+  ) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+print(epa_third_fourth_plot)
+
