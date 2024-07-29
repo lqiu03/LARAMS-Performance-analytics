@@ -1,0 +1,64 @@
+# Load necessary libraries
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for the 2023 season
+pbp_data <- load_pbp(2023)
+
+# Filter the data for plays against the LA Rams
+rams_defense_data <- pbp_data %>%
+  filter(defteam == "LA")
+
+# Calculate yards allowed per play type for each game
+yards_allowed_per_play_type <- rams_defense_data %>%
+  filter(play_type %in% c("pass", "run")) %>%
+  group_by(week, game_id, home_team, away_team, play_type) %>%
+  summarize(
+    total_yards_allowed = sum(yards_gained, na.rm = TRUE),
+    play_count = n(),
+    yards_allowed_per_play = total_yards_allowed / play_count,
+    .groups = 'drop'
+  )
+
+# Retrieve end scores and determine W/L
+scores <- pbp_data %>%
+  group_by(game_id) %>%
+  summarize(
+    home_team = first(home_team),
+    away_team = first(away_team),
+    home_score = max(home_score, na.rm = TRUE),
+    away_score = max(away_score, na.rm = TRUE),
+    week = first(week),  # Ensure week is included for the join
+    result = if_else(home_team == "LA" & home_score > away_score, "W",
+                     if_else(away_team == "LA" & away_score > home_score, "W", "L")),
+    .groups = 'drop'
+  )
+
+# Join scores with yards allowed per play type data
+yards_allowed_per_play_type <- yards_allowed_per_play_type %>%
+  left_join(scores, by = c("game_id", "home_team", "away_team", "week"))
+
+# Create a new column for the facet labels with scores and result
+yards_allowed_per_play_type <- yards_allowed_per_play_type %>%
+  mutate(facet_label = paste("2023 Week", week, away_team, "at", home_team, "-", 
+                             away_score, ":", home_score, "(", result, ")"))
+
+# Print yards allowed per play type by opponent and play type
+print(yards_allowed_per_play_type)
+
+# Visualize yards allowed per play type by opponent and play type with updated facet labels
+ggplot(yards_allowed_per_play_type, aes(x = yards_allowed_per_play, y = play_type, fill = play_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = round(yards_allowed_per_play, 2)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.1, 
+            size = 3) +
+  facet_wrap(~ reorder(facet_label, week), scales = "free_y", ncol = 3) +
+  labs(title = "Yards Allowed Per Play Type Against 2023 Rams Opponents", 
+       subtitle = "Analysis of yards allowed per play type for the LA Rams by opponent and play type during the 2023 season",
+       caption = "Data Source: NFLfastR",
+       x = "Yards Allowed Per Play", 
+       y = "Play Type") +
+  theme_minimal() +
+  theme(legend.position = "bottom", legend.title = element_blank(), plot.title = element_text(size = 16))
