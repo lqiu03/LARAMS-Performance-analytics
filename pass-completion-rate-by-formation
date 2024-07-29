@@ -1,0 +1,75 @@
+# Load necessary libraries
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for the 2023 season
+pbp_data <- load_pbp(2023)
+
+# Filter the data for the LA Rams
+rams_data <- pbp_data %>%
+  filter(posteam == "LA")
+
+# Create a formation column based on shotgun and no_huddle
+rams_data <- rams_data %>%
+  mutate(formation = case_when(
+    shotgun == 1 & no_huddle == 1 ~ "Shotgun No Huddle",
+    shotgun == 1 & no_huddle == 0 ~ "Shotgun",
+    shotgun == 0 & no_huddle == 1 ~ "No Huddle",
+    shotgun == 0 & no_huddle == 0 ~ "Under Center",
+    TRUE ~ "Other"
+  ))
+
+# Calculate formation success rate by game and half based on completion of catch
+formation_success_rate_by_game_half <- rams_data %>%
+  mutate(half = if_else(game_half == "Half1", "1st Half", "2nd Half")) %>%
+  group_by(game_id, formation, half, week, home_team, away_team) %>%
+  summarize(
+    success_rate = mean(complete_pass == 1, na.rm = TRUE),
+    play_count = n(),
+    .groups = 'drop'
+  )
+
+# Retrieve end scores
+scores <- pbp_data %>%
+  group_by(game_id) %>%
+  summarize(
+    home_team = first(home_team),
+    away_team = first(away_team),
+    home_score = max(home_score, na.rm = TRUE),
+    away_score = max(away_score, na.rm = TRUE),
+    week = first(week),  # Ensure week is included for the join
+    .groups = 'drop'
+  )
+
+# Determine win or loss
+scores <- scores %>%
+  mutate(
+    result = if_else(home_team == "LA" & home_score > away_score, "W",
+                     if_else(away_team == "LA" & away_score > home_score, "W", "L"))
+  )
+
+# Join scores with formation success rate data
+formation_success_rate_by_game_half <- formation_success_rate_by_game_half %>%
+  left_join(scores, by = c("game_id", "home_team", "away_team", "week"))
+
+# Create a new column for the facet labels
+formation_success_rate_by_game_half <- formation_success_rate_by_game_half %>%
+  mutate(facet_label = paste("2023 Week", week, away_team, "at", home_team, "-", away_score, ":", home_score, "(", result, ")"))
+
+# Print formation success rate by game and half
+print(formation_success_rate_by_game_half)
+
+# Update Titles and Visualize with annotations sorted by week
+ggplot(formation_success_rate_by_game_half, aes(x = formation, y = success_rate, fill = half)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +
+  geom_text(aes(label = ifelse(success_rate == 0, "", scales::percent(success_rate, accuracy = 0.1))), 
+            position = position_dodge(width = 0.9), 
+            vjust = -0.5, 
+            size = 3) +
+  facet_wrap(~ reorder(facet_label, week), scales = "free_y", ncol = 3) +
+  coord_flip() +
+  labs(title = "Pass Completion Rate by Formation for LA Rams 2023 Season by Game and Half", x = "Formation", y = "Success Rate") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme_minimal() +
+  theme(legend.position = "bottom", legend.title = element_blank(), plot.title = element_text(size = 16, face = "bold"))
