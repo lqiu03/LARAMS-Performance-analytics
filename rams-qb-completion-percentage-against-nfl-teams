@@ -1,0 +1,48 @@
+#remove the # if library is pre-loaded
+#library(dplyr)
+#library(ggplot2)
+#library(nflfastr)
+
+#load play-by-play data from 2020-2023)
+pbp_data <- load_pbp(2020:2021:2022:2023)
+#filter rams game and passing plays
+rams_passing_plays <- pbp_data %>%
+  filter(posteam == "LA", play_type == "pass")
+
+#completion percentage for each QB against each teams
+qb_completion_vs_opponent <- rams_passing_plays %>%
+  group_by(passer_player_name, defteam, season_type, game_date) %>%
+  summarize(attempts = n(),
+            completions = sum(complete_pass == 1, na.rm = TRUE))%>%
+  filter (attempts >=10) %>%
+  mutate (completion_percentage = completions / attempts * 100)
+
+# Define Rams official colors
+rams_blue <- "#003594"  # Rams Blue
+rams_yellow <- "#FFA300"  # Rams Yellow
+
+# Extract the Rams logo from the teams_colors_logos dataframe
+rams_logo_url <- teams_colors_logos %>%
+  filter(team_abbr == "LA") %>%
+  pull(team_logo_espn)
+
+# Plot Completion Percentage
+completion_plot <- ggplot(qb_completion_vs_opponent, aes(x = reorder(defteam, -completion_percentage), y = completion_percentage, fill = passer_player_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  facet_wrap(~ season_type, scales = "free_x") +
+  theme_bw() +
+  labs(
+    x = "Opponent Teams",
+    y = "Completion Percentage",
+    title = "Completion Percentage of Rams Quarterbacks Against NFL Opponents",
+    subtitle = "2020-2023, Faceted by Season Type",
+    fill = "Quarterback"
+  ) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+         
+  print(completion_plot)
