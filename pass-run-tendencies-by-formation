@@ -1,0 +1,47 @@
+# Load necessary libraries
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for the 2023 season
+pbp_data <- load_pbp(2023)
+
+# Filter the data for the LA Rams
+rams_data <- pbp_data %>%
+  filter(posteam == "LA")
+
+# Create a formation column based on shotgun and no_huddle
+rams_data <- rams_data %>%
+  mutate(formation = case_when(
+    shotgun == 1 & no_huddle == 1 ~ "Shotgun No Huddle",
+    shotgun == 1 & no_huddle == 0 ~ "Shotgun",
+    shotgun == 0 & no_huddle == 1 ~ "No Huddle",
+    shotgun == 0 & no_huddle == 0 ~ "Under Center",
+    TRUE ~ "Other"
+  ))
+
+# Calculate the number of pass and run plays for each formation and each opponent
+pass_run_tendencies_by_opponent <- rams_data %>%
+  filter(play_type %in% c("pass", "run")) %>%
+  group_by(week, game_id, formation, play_type, home_team, away_team) %>%
+  summarize(
+    play_count = n(),
+    .groups = 'drop'
+  ) %>%
+  mutate(play_type = factor(play_type, levels = c("run", "pass")))
+
+# Create a new column for the facet labels
+pass_run_tendencies_by_opponent <- pass_run_tendencies_by_opponent %>%
+  mutate(facet_label = paste("2023 Week", week, away_team, "at", home_team))
+
+# Print pass/run tendencies by opponent
+print(pass_run_tendencies_by_opponent)
+
+# Visualize pass vs. run tendencies by opponent with swapped axes
+ggplot(pass_run_tendencies_by_opponent, aes(x = play_count, y = formation, fill = play_type)) +
+  geom_bar(stat = "identity", position = "fill") +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  facet_wrap(~ reorder(facet_label, week), scales = "free_y", ncol = 3) +
+  labs(title = "Pass vs. Run Tendencies by Formation for LA Rams by Game", x = "Percentage", y = "Formation") +
+  theme_minimal() +
+  theme(legend.position = "bottom", legend.title = element_blank(), plot.title = element_text(size = 16))
