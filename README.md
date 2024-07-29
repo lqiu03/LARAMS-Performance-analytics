@@ -1,5 +1,5 @@
 # Rams Offense & Defense Analytics
-https://github.com/lqiu03/LARAMS-Performance-analytics/raw/main/download.png
+![Rams Logo](https://github.com/lqiu03/LARAMS-Performance-analytics/raw/main/download.png)
 
 This repository contains various analyses and visualizations of the LA Rams' defensive performance for the 2023 NFL season. The play-by-play data is sourced from the NFLfastR package.
 
