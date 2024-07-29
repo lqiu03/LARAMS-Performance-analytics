@@ -1,0 +1,64 @@
+# Load necessary libraries
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for the 2023 season
+pbp_data <- load_pbp(2023)
+
+# Filter the data for the LA Rams and for Red Zone passing plays only
+rams_redzone_data <- pbp_data %>%
+  filter(posteam == "LA" & yardline_100 <= 20 & play_type == "pass")
+
+# Calculate completion rate by play type for each game in the Red Zone
+redzone_completion_rate <- rams_redzone_data %>%
+  group_by(week, game_id, home_team, away_team, play_type) %>%
+  summarize(
+    play_count = n(),
+    completions = sum(complete_pass == 1, na.rm = TRUE),
+    completion_rate = completions / play_count,
+    .groups = 'drop'
+  )
+
+# Retrieve end scores and determine W/L
+scores <- pbp_data %>%
+  group_by(game_id) %>%
+  summarize(
+    home_team = first(home_team),
+    away_team = first(away_team),
+    home_score = max(home_score, na.rm = TRUE),
+    away_score = max(away_score, na.rm = TRUE),
+    week = first(week),  # Ensure week is included for the join
+    result = if_else(home_team == "LA" & home_score > away_score, "W",
+                     if_else(away_team == "LA" & away_score > home_score, "W", "L")),
+    .groups = 'drop'
+  )
+
+# Join scores with completion rate data
+redzone_completion_rate <- redzone_completion_rate %>%
+  left_join(scores, by = c("game_id", "home_team", "away_team", "week"))
+
+# Create a new column for the facet labels with scores and result
+redzone_completion_rate <- redzone_completion_rate %>%
+  mutate(facet_label = paste("2023 Week", week, away_team, "at", home_team, "-", 
+                             away_score, ":", home_score, "(", result, ")"))
+
+# Print Red Zone completion rate by opponent and play type
+print(redzone_completion_rate)
+
+# Visualize Red Zone completion rate by opponent and play type with updated facet labels
+ggplot(redzone_completion_rate, aes(x = completion_rate, y = play_type, fill = play_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = scales::percent(completion_rate, accuracy = 0.1)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.1, 
+            size = 3) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  facet_wrap(~ reorder(facet_label, week), scales = "free_y", ncol = 3) +
+  labs(title = "Red Zone Completion Rate by Play Type for LA Rams by Game", 
+       subtitle = "Analysis of Red Zone completion rate for the LA Rams by opponent and play type during the 2023 season",
+       caption = "Data Source: NFLfastR",
+       x = "Completion Rate", 
+       y = "Play Type") +
+  theme_minimal() +
+  theme(legend.position = "bottom", legend.title = element_blank(), plot.title = element_text(size = 16))
