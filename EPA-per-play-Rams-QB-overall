@@ -1,0 +1,50 @@
+# Install and load necessary packages
+#if (!require("nflfastR")) install.packages("nflfastR")
+#if (!require("dplyr")) install.packages("dplyr")
+#if (!require("ggplot2")) install.packages("ggplot2")
+
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for 2022 and 2023 seasons
+pbp_data_2022 <- load_pbp(2022)
+pbp_data_2023 <- load_pbp(2023)
+
+# Combine the datasets for 2022 and 2023
+pbp_data <- bind_rows(pbp_data_2022, pbp_data_2023)
+
+# Filter for Rams games and relevant plays (e.g., pass and run plays)
+rams_plays <- pbp_data %>%
+  filter(posteam == "LA", play_type %in% c("pass", "run"))
+
+# Calculate EPA per play for each quarterback
+qb_epa <- rams_plays %>%
+  group_by(passer_player_name) %>%
+  summarize(
+    total_plays = n(),
+    total_epa = sum(epa, na.rm = TRUE),
+    epa_per_play = mean(epa, na.rm = TRUE)
+  ) %>%
+  filter(total_plays >= 10)  # Ensure a minimum number of plays to be included
+
+# Plot EPA per Play
+epa_plot <- ggplot(qb_epa, aes(x = reorder(passer_player_name, epa_per_play), y = epa_per_play, fill = passer_player_name)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  labs(
+    x = "Quarterback",
+    y = "EPA per Play",
+    title = "EPA per Play for Rams Quarterbacks (2022-2023)",
+    subtitle = "Minimum of 10 plays",
+    caption = "By Lucas Qiu",
+    fill = "Quarterback"
+  ) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+# Print the plot
+print(epa_plot)
