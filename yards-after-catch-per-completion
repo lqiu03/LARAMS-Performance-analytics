@@ -1,0 +1,50 @@
+# Install and load necessary packages
+if (!require("nflfastR")) install.packages("nflfastR")
+if (!require("dplyr")) install.packages("dplyr")
+if (!require("ggplot2")) install.packages("ggplot2")
+
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for 2022 and 2023 seasons
+pbp_data_2022 <- load_pbp(2022)
+pbp_data_2023 <- load_pbp(2023)
+
+# Combine the datasets for 2022 and 2023
+pbp_data <- bind_rows(pbp_data_2022, pbp_data_2023)
+
+# Filter for Rams games
+rams_plays <- pbp_data %>%
+  filter(posteam == "LA")
+
+# Calculate Yards After Catch (YAC) per Completion for Each Receiver
+receiver_yac <- rams_plays %>%
+  filter(play_type == "pass", !is.na(receiver_player_name), complete_pass == 1) %>%
+  group_by(receiver_player_name) %>%
+  summarize(
+    total_completions = n(),
+    total_yac = sum(yards_after_catch, na.rm = TRUE),
+    yac_per_completion = total_yac / total_completions
+  ) %>%
+  filter(total_completions >= 10)  # Ensure a minimum number of completions to be included
+
+# Plot YAC per Completion
+yac_plot <- ggplot(receiver_yac, aes(x = reorder(receiver_player_name, yac_per_completion), y = yac_per_completion, fill = receiver_player_name)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  labs(
+    x = "Receiver",
+    y = "YAC per Completion",
+    title = "Yards After Catch per Completion for Rams Receivers",
+    subtitle = "2022-2023, Minimum of 10 completions",
+    caption = "By Lucas Qiu",
+    fill = "Receiver"
+  ) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+print(yac_plot)
