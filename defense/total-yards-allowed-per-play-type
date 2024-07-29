@@ -1,0 +1,60 @@
+# Load necessary libraries
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for the 2023 season
+pbp_data <- load_pbp(2023)
+
+# Filter the data for plays against the LA Rams
+rams_defense_data <- pbp_data %>%
+  filter(defteam == "LA")
+
+# Calculate total yards allowed per opponent for each game
+total_yards_allowed <- rams_defense_data %>%
+  group_by(week, game_id, home_team, away_team) %>%
+  summarize(
+    total_yards_allowed = sum(yards_gained, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Retrieve end scores and determine W/L
+scores <- pbp_data %>%
+  group_by(game_id) %>%
+  summarize(
+    home_team = first(home_team),
+    away_team = first(away_team),
+    home_score = max(home_score, na.rm = TRUE),
+    away_score = max(away_score, na.rm = TRUE),
+    week = first(week),  # Ensure week is included for the join
+    result = if_else(home_team == "LA" & home_score > away_score, "W",
+                     if_else(away_team == "LA" & away_score > home_score, "W", "L")),
+    .groups = 'drop'
+  )
+
+# Join scores with total yards allowed data
+total_yards_allowed <- total_yards_allowed %>%
+  left_join(scores, by = c("game_id", "home_team", "away_team", "week"))
+
+# Create a new column for the facet labels with scores and result
+total_yards_allowed <- total_yards_allowed %>%
+  mutate(facet_label = paste("2023 Week", week, away_team, "at", home_team, "-", 
+                             away_score, ":", home_score, "(", result, ")"))
+
+# Print total yards allowed per opponent
+print(total_yards_allowed)
+
+# Visualize total yards allowed per opponent with updated facet labels
+ggplot(total_yards_allowed, aes(x = total_yards_allowed, y = reorder(facet_label, week), fill = factor(week))) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = total_yards_allowed), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.1, 
+            size = 3) +
+  labs(title = "Total Yards Allowed Per Opponent Against 2023 Rams", 
+       subtitle = "Analysis of total yards allowed per opponent for the LA Rams during the 2023 season",
+       caption = "Data Source: By Lucas Qiu",
+       x = "Total Yards Allowed", 
+       y = "Opponent") +
+  theme_minimal() +
+  theme(legend.position = "none", plot.title = element_text(size = 16))
