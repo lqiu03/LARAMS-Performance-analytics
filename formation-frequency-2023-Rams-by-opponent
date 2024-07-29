@@ -1,0 +1,65 @@
+# Load necessary libraries
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for the 2023 season
+pbp_data <- load_pbp(2023)
+
+# Filter the data for the LA Rams
+rams_data <- pbp_data %>%
+  filter(posteam == "LA")
+
+# Create a formation column based on shotgun and no_huddle
+rams_data <- rams_data %>%
+  mutate(formation = case_when(
+    shotgun == 1 & no_huddle == 1 ~ "Shotgun No Huddle",
+    shotgun == 1 & no_huddle == 0 ~ "Shotgun",
+    shotgun == 0 & no_huddle == 1 ~ "No Huddle",
+    shotgun == 0 & no_huddle == 0 ~ "Under Center",
+    TRUE ~ "Other"
+  ))
+
+# Calculate formation frequency by game and half
+formation_frequency_by_game_half <- rams_data %>%
+  mutate(half = if_else(game_half == "Half1", "1st Half", "2nd Half")) %>%
+  group_by(game_id, formation, half, week, home_team, away_team) %>%
+  summarize(
+    play_count = n(),
+    success_rate = mean(epa > 0, na.rm = TRUE),
+    avg_yards = mean(yards_gained, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Retrieve end scores
+scores <- pbp_data %>%
+  group_by(game_id) %>%
+  summarize(
+    home_team = first(home_team),
+    away_team = first(away_team),
+    home_score = max(home_score, na.rm = TRUE),
+    away_score = max(away_score, na.rm = TRUE),
+    week = first(week),  # Ensure week is included for the join
+    .groups = 'drop'
+  )
+
+# Join scores with formation frequency data
+formation_frequency_by_game_half <- formation_frequency_by_game_half %>%
+  left_join(scores, by = c("game_id", "home_team", "away_team", "week"))
+
+# Create a new column for the facet labels
+formation_frequency_by_game_half <- formation_frequency_by_game_half %>%
+  mutate(facet_label = paste("2023 Week", week, away_team, "at", home_team, "-", away_score, ":", home_score))
+
+# Print formation frequency by game and half
+print(formation_frequency_by_game_half)
+
+# Update Titles and Visualize
+ggplot(formation_frequency_by_game_half, aes(x = formation, y = play_count, fill = half)) +
+  geom_bar(stat = "identity", position = "stack") +
+  geom_text(aes(label = play_count), position = position_stack(vjust = 0.5), size = 3)+
+  facet_wrap(~ reorder(facet_label, week), scales = "free_y", ncol = 3) +
+  coord_flip() +
+  labs(title = "Formation Frequency for LA Rams 2023 Season by Game and Half", x = "Formation", y = "Play Count") +
+  theme_minimal() +
+  theme(legend.position = "bottom", legend.title = element_blank(), plot.title = element_text(size = 16))
