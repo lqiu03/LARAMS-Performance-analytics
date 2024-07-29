@@ -1,0 +1,62 @@
+# Load necessary libraries
+library(nflfastR)
+library(dplyr)
+library(ggplot2)
+
+# Load play-by-play data for the 2023 season
+pbp_data <- load_pbp(2023)
+
+# Filter the data for the LA Rams and for Red Zone plays
+rams_redzone_data <- pbp_data %>%
+  filter(posteam == "LA" & yardline_100 <= 20)
+
+# Calculate EPA efficiency by play type for each game in the Red Zone
+redzone_epa_efficiency <- rams_redzone_data %>%
+  filter(play_type %in% c("pass", "run")) %>%
+  group_by(week, game_id, home_team, away_team, play_type) %>%
+  summarize(
+    epa_efficiency = mean(epa, na.rm = TRUE),
+    .groups = 'drop'
+  )
+
+# Retrieve end scores and determine W/L
+scores <- pbp_data %>%
+  group_by(game_id) %>%
+  summarize(
+    home_team = first(home_team),
+    away_team = first(away_team),
+    home_score = max(home_score, na.rm = TRUE),
+    away_score = max(away_score, na.rm = TRUE),
+    week = first(week),  # Ensure week is included for the join
+    result = if_else(home_team == "LA" & home_score > away_score, "W",
+                     if_else(away_team == "LA" & away_score > home_score, "W", "L")),
+    .groups = 'drop'
+  )
+
+# Join scores with EPA efficiency data
+redzone_epa_efficiency <- redzone_epa_efficiency %>%
+  left_join(scores, by = c("game_id", "home_team", "away_team", "week"))
+
+# Create a new column for the facet labels with scores and result
+redzone_epa_efficiency <- redzone_epa_efficiency %>%
+  mutate(facet_label = paste("2023 Week", week, away_team, "at", home_team, "-", 
+                             away_score, ":", home_score, "(", result, ")"))
+
+# Print Red Zone EPA efficiency by opponent and play type
+print(redzone_epa_efficiency)
+
+# Visualize Red Zone EPA efficiency by opponent and play type with updated facet labels
+ggplot(redzone_epa_efficiency, aes(x = epa_efficiency, y = play_type, fill = play_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(label = round(epa_efficiency, 2)), 
+            position = position_dodge(width = 0.9), 
+            hjust = -0.1, 
+            size = 3) +
+  facet_wrap(~ reorder(facet_label, week), scales = "free_y", ncol = 3) +
+  labs(title = "Red Zone EPA Efficiency by Play Type for LA Rams by Game", 
+       subtitle = "Analysis of Red Zone EPA efficiency for the LA Rams by opponent and play type during the 2023 season",
+       caption = "Data Source: NFLfastR",
+       x = "EPA Efficiency", 
+       y = "Play Type") +
+  theme_minimal() +
+  theme(legend.position = "bottom", legend.title = element_blank(), plot.title = element_text(size = 16))
