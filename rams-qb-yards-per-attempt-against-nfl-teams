@@ -1,0 +1,53 @@
+# Load necessary libraries
+#if (!require("dplyr")) install.packages("dplyr")
+#if (!require("ggplot2")) install.packages("ggplot2")
+#if (!require("ggimage")) install.packages("ggimage")
+#library(dplyr)
+#library(ggplot2)
+#library(ggimage)
+
+# Filter for Rams games and passing plays
+rams_passing_plays <- pbp_data %>%
+  filter(posteam == "LA", play_type == "pass")
+
+# Calculate yards per attempt for each quarterback against each opponent, aggregated by season
+qb_yards_per_attempt_vs_opponent <- rams_passing_plays %>%
+  group_by(passer_player_name, defteam, season_type) %>%
+  summarize(
+    attempts = n(),
+    yards = sum(yards_gained, na.rm = TRUE)
+  ) %>%
+  filter(attempts >= 10) %>%
+  mutate(yards_per_attempt = yards / attempts)
+
+# Define Rams official colors
+rams_blue <- "#003594"  # Rams Blue
+rams_yellow <- "#FFA300"  # Rams Yellow
+
+# Extract the Rams logo from the teams_colors_logos dataframe
+rams_logo_url <- teams_colors_logos %>%
+  filter(team_abbr == "LA") %>%
+  pull(team_logo_espn)
+
+# Plot Yards per Attempt
+yards_per_attempt_plot <- ggplot(qb_yards_per_attempt_vs_opponent, aes(x = reorder(defteam, -yards_per_attempt), y = yards_per_attempt, fill = passer_player_name)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_smooth(method = "lm", color = "black", aes(group = 1)) +
+  facet_wrap(~ season_type, scales = "free_x") +
+  theme_bw() +
+  labs(
+    x = "Opponent Teams",
+    y = "Yards per Attempt",
+    title = "Yards per Attempt of Rams Quarterbacks Against NFL Opponents",
+    subtitle = "2020-2023, Faceted by Season Type",
+    caption = "By Lucas Qiu",
+    fill = "Quarterback"
+  ) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 14, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+# Print the plot
+print(yards_per_attempt_plot)
